@@ -1,8 +1,37 @@
+'''
+@ Jeremy Schroeter, Nov 2024
+
+Implemented as described in "Cognitive Model Discovery via Disentengled RNNs"
+Miller et. al.
+'''
+
 import torch
 import torch.distributions as dist
 from torch import nn, Tensor
 
 class MLP(nn.Module):
+    '''
+    Multi-layer Perceptron module
+
+    Parameters
+    ----------
+    input_size : int
+        input data dimensionality
+
+    output_size : int
+        output dimensionality
+
+    hidden_size : list[int]
+        dimensionality of intermediate layers
+
+    act : nn.Module
+        activation function. Default is rectified linear
+
+    Returns
+    ----------
+    Tensor
+        MLP output
+    '''
     def __init__(
             self,
             input_size: int,
@@ -28,6 +57,12 @@ class MLP(nn.Module):
     
 
 class Bottleneck(nn.Module):
+    '''
+    Information Bottleneck
+
+    This module computes the kld and performs the corrupting step
+    but doesn't actually have any internal parameters
+    '''
     def __init__(self) -> None:
         super(Bottleneck, self).__init__()
         
@@ -43,6 +78,34 @@ class Bottleneck(nn.Module):
 
 
 class UpdateMLPs(nn.Module):
+    '''
+    Module used to update the latent variables
+
+    Parameters
+    ----------
+    num_latents : int
+        latent state dimensionality (number of MLPs)
+    
+    input_size : int
+        dimensionality of the input data (number of latents + number of observations)
+
+    hidden_size : list[int]
+        dimensionality of intermediate layers, all MLPs have some hidden sizes
+
+    Forward Pass
+    ----------
+    x : Tensor
+        Tensor containing latents and observations after passing through the
+        "Update Bottlenecks"
+
+    z_t : Tensor
+        Tensor containing previous latents after passed through the "global bottlenecks"
+    
+    Returns
+    ----------
+    Tensor
+        updated latents
+    '''
     def __init__(
             self,
             num_latents: int,
@@ -67,6 +130,44 @@ class UpdateMLPs(nn.Module):
 
 
 class DisRNN(nn.Module):
+    '''
+    Disentangled RNN Module
+
+    Parameters
+    ----------
+    num_latents : int
+        Dimensionality of the latent state
+    
+    num_obs : int
+        Dimensionality of the observations
+    
+    update_mlp_hidden_size : list[int]
+        Hidden layer sizes for the update MLPs
+    
+    choice_mlp_hidden_size : list[int]
+        Hidden layer sizes for the choice MLPs
+    
+    Forward Pass
+    ----------
+    latents : Tensor
+        Latent state vector at time step. Assumed to be size
+        (batch_size, num_latents), give a dummy Tensor if t0
+    
+    obs : Tensor
+        Observation vector at time step. Assumed to be size
+        (batch_size, num_obs), give a dummy Tensor if t0
+    
+    t0 : bool
+        True if first time step otw False, default = False
+    
+    eval_mode : bool
+        Whether to run bottlenecks w/ or w/o noise, default = False
+
+    Returns
+    ----------
+    tuple[Tensor, Tensor, Tensor]
+        tuple containing (1) choice logits (2) updated latents (3) kld penalty
+    '''
     def __init__(
             self,
             num_latents: int,
@@ -99,10 +200,22 @@ class DisRNN(nn.Module):
             eval_mode: bool = False
     ) -> tuple[Tensor, Tensor, Tensor]:
         
-        # Prepare model input
+
         B, _ = latents.size()
+
+        # If first time step, predict choice from learned init condition
         if t0:
             latents = torch.expand_copy(self.z0, (B, self.num_latents))
+            z_tilde, global_kld = self.global_bottleneck(
+                new_latents,
+                self.global_bottleneck_log_var * (1 - eval_mode),
+                1
+            )
+            y = self.choice_mlp(z_tilde)
+            return y, z_tilde, global_kld
+        
+        # If not first time step, update latents and then predict
+        else:
             x = torch.cat((latents, obs), dim=-1)
 
             update_mlp_inputs = torch.zeros(size=(B, self.update_mlp_input_size, self.num_latents))
