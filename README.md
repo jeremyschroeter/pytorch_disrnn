@@ -4,7 +4,7 @@
 PyTorch implementation of Disentangled RNN from the paper [Cognitive Model Discovery via Disentangled RNNs](https://proceedings.neurips.cc/paper_files/paper/2023/file/c194ced51c857ec2c1928b02250e0ac8-Paper-Conference.pdf)
 
 ## To-Do List
- - [ ] Basic architecture
+ - [x] Basic architecture
  - [ ] Synthetic Q-learning agent dataset
  - [ ] Training script
  - [ ] Plotting
