@@ -5,7 +5,7 @@ PyTorch implementation of Disentangled RNN from the paper [Cognitive Model Disco
 
 ## To-Do List
  - [x] Basic architecture
- - [ ] Synthetic Q-learning agent dataset
+ - [x] Synthetic Q-learning agent dataset
  - [ ] Training script
  - [ ] Plotting
 
